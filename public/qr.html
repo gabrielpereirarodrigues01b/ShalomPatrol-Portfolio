@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShalomPatrol: QR codes dos pontos</title>
+<style>
+/* Cores do sistema. Para mudar o visual desta página, troque os valores aqui. */
+:root{--brand:#373F92;--gold:#E8B149;--ink:#17212B;--wait:#5B6B7B}
+/* Navegação por cursor (tecla F7 no Chrome/Edge): o navegador mostra um traço de texto onde se clica, como se desse para digitar.
+   Aqui o traço fica invisível no site inteiro e volta só nos campos em que realmente se digita */
+html{caret-color:transparent}
+input,select,textarea{caret-color:auto}
+body{margin:0;padding:24px;font:16px/1.5 "Segoe UI",system-ui,sans-serif;color:var(--ink)}
+/* o cabeçalho é "interface": o texto dele não é selecionável */
+.page-head{display:flex;align-items:center;gap:20px;margin-bottom:12px;padding-bottom:12px;border-bottom:4px solid var(--gold);-webkit-user-select:none;user-select:none}
+.page-head .school{display:block;height:64px;width:auto}
+.page-head h1{margin:0;font-size:1.5rem;color:var(--brand)}
+.page-head p{margin:0;color:var(--wait)}
+/* O nome "ShalomPatrol" é uma imagem (um <img> com SVG embutido), não um texto: não dá para selecionar nem arrastar.
+   A altura de 1,333 em faz as letras da imagem terem o mesmo tamanho da fonte do h1 */
+.wordmark{display:block;height:1.3333em;width:auto}
+img{-webkit-user-drag:none}
+/* botão Fechar: no canto direito do cabeçalho (não sai na impressão, porque o cabeçalho é .noprint) */
+.close-tab{margin-left:auto;display:inline-flex;align-items:center;min-height:52px;padding:0 24px;border:2px solid var(--brand);border-radius:6px;background:#fff;color:var(--brand);font:inherit;font-size:1.05rem;font-weight:600;cursor:pointer}
+.close-tab:hover{background:var(--brand);color:#fff}
+.close-tab:focus-visible{outline:3px solid #1E76C1;outline-offset:2px}
+.ponto{display:inline-block;width:340px;margin:12px;padding:16px 20px 20px;border:2px solid var(--brand);border-top:8px solid var(--gold);text-align:center;vertical-align:top;break-inside:avoid}
+.ponto .logo{display:block;margin:0 auto 10px;height:70px;width:auto}
+.ponto h2{margin:0 0 12px;font-size:1.8rem;color:var(--brand)}
+.ponto .qr{display:flex;justify-content:center}
+.ponto small{display:block;margin-top:10px;word-break:break-all;color:var(--wait)}
+/* na impressão: some o cabeçalho e o endereço (link) escrito embaixo de cada QR code; só ficam o logo, o nome do ponto e o QR code */
+@media print{.noprint,.ponto small{display:none}}
+</style>
+</head>
+<body>
+<header class="page-head noprint">
+  <img class="school" src="/logo.jpg" alt="Logo da instituição" width="144" height="64" draggable="false">
+  <div>
+    <!-- O nome é uma imagem SVG (a mesma do painel.html): o texto dentro de um <img> não pode ser selecionado.
+         Para mudar cor ou tamanho, edite fill e font-size dentro do src (%23 é o "#" da cor). -->
+    <h1><img class="wordmark" alt="ShalomPatrol" width="154" height="32" draggable="false" src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='154' height='32' viewBox='0 0 154 32'><text x='0' y='24' textLength='154' lengthAdjust='spacingAndGlyphs' font-family='Segoe UI,system-ui,-apple-system,Roboto,Arial,sans-serif' font-size='24' font-weight='700' fill='%23373F92'>ShalomPatrol</text></svg>"></h1>
+    <p>QR codes dos pontos de ronda</p>
+  </div>
+  <button type="button" class="close-tab" id="close-tab">Fechar</button>
+</header>
+<p class="noprint">Imprima esta página (Ctrl+P) e fixe cada QR code no ponto correspondente. Este computador precisa de internet para gerar os códigos.</p>
+<div id="list"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script>
+// Fechar: fecha esta aba e volta para o painel, que continua aberto na outra aba.
+// Se o navegador não deixar fechar (aba aberta digitando o endereço), leva para o painel nesta mesma aba
+document.getElementById('close-tab').addEventListener('click', () => {
+  window.close();
+  setTimeout(() => { location.href = '/'; }, 300);
+});
+(async () => {
+  const r = await fetch('/api/points');
+  if (r.status === 401) { document.body.insertAdjacentHTML('beforeend', '<p>Entre como coordenador no <a href="/">painel</a> e volte aqui.</p>'); return; }
+  for (const p of await r.json()) {
+    const box = document.createElement('div');
+    box.className = 'ponto';
+    // cada cartão leva o logo da instituição, para o QR code impresso já sair com a identidade
+    box.innerHTML = '<img class="logo" src="/logo.jpg" alt="Logo da instituição" width="158" height="70" draggable="false"><h2></h2><div class="qr"></div><small></small>';
+    box.querySelector('h2').textContent = p.name;
+    box.querySelector('small').textContent = p.url;
+    document.getElementById('list').appendChild(box);
+    new QRCode(box.querySelector('.qr'), { text: p.url, width: 260, height: 260 });
+  }
+})();
+</script>
+</body>
+</html>

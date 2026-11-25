@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShalomPatrol: painel de rondas</title>
+<style>
+/* Cores do sistema. Para mudar o visual do painel, troque os valores aqui.
+   Verde (--ok) e vermelho (--late) ficam fixos: são o significado de "Em dia" e "Atrasado". */
+:root{--brand:#373F92;--brand-dark:#2B327A;--blue:#1E76C1;--gold:#E8B149;
+  --ink:#17212B;--paper:#F3F5F9;--line:#D3DAE2;--ok:#1E7A46;--wait:#5B6B7B;--late:#B3261E;--off:#8A94A0;--accent:var(--brand)}
+*{box-sizing:border-box}
+/* Navegação por cursor (tecla F7 no Chrome/Edge): o navegador mostra um traço de texto onde se clica, como se desse para digitar.
+   Aqui o traço fica invisível no site inteiro e volta só nos campos em que realmente se digita */
+html{caret-color:transparent}
+input,select,textarea{caret-color:auto}
+body{margin:0;background:var(--paper);color:var(--ink);font:16px/1.5 "Segoe UI",system-ui,sans-serif}
+header{display:flex;align-items:center;gap:20px;flex-wrap:wrap;padding:12px 32px;background:#fff;border-bottom:4px solid var(--gold)}
+.logo{display:block;height:64px;width:auto;padding-right:20px;border-right:2px solid var(--line)}
+h1{margin:0;font-size:1.6rem;color:var(--brand)}
+h1 small{margin-left:12px;font-size:1rem;font-weight:400;color:var(--wait)}
+/* O nome "ShalomPatrol" é uma imagem (um <img> com SVG embutido), não um texto: não dá para selecionar nem arrastar.
+   A altura de 1,333 em faz as letras da imagem terem o mesmo tamanho da fonte do h1; o vertical-align alinha a base
+   das letras com a base do texto "Controle de rondas" */
+.wordmark{height:1.3333em;width:auto;vertical-align:-.3333em}
+/* Cabeçalho, abas e botões são "interface": o texto deles não é selecionável. Tabelas e relatório continuam selecionáveis */
+header,nav,button,.qr-link{-webkit-user-select:none;user-select:none}
+img,.qr-link{-webkit-user-drag:none}
+h2{margin:0 0 8px;font-size:1.1rem;color:var(--brand)}
+a{color:var(--accent)}
+/* botão dos QR codes: sozinho no canto direito, longe das abas e do Atualizar */
+.qr-link{margin-left:auto;display:inline-flex;align-items:center;min-height:52px;padding:0 24px;border:2px solid var(--accent);border-radius:6px;background:#fff;color:var(--accent);font-size:1.05rem;font-weight:600;text-decoration:none}
+.qr-link:hover{background:var(--accent);color:#fff}
+nav{display:flex;gap:8px;padding:16px 32px 0}
+nav button{padding:12px 24px;font:inherit;font-size:1.05rem;font-weight:600;background:#fff;color:var(--ink);border:1px solid var(--line);border-radius:6px 6px 0 0;cursor:pointer}
+nav button:hover{background:#ECEFF9}
+nav button[aria-selected=true]{background:var(--brand);border-color:var(--brand);color:#fff}
+section{padding:16px 32px 24px;max-width:1100px}
+table{width:100%;border-collapse:collapse;background:#fff}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-weight:600;color:var(--wait);font-size:.9rem}
+small{color:var(--wait)}
+.num{font-variant-numeric:tabular-nums}
+.note{padding:14px 16px;background:#fff;border-left:6px solid var(--off);font-weight:600}
+.round{background:#fff;border-left:8px solid var(--c);margin-bottom:16px;padding:12px 16px}
+.round .head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap}
+.round h3{margin:0;font-size:1.05rem}
+.round table{margin-top:8px}
+/* telas largas: colunas com largura fixa, para as tabelas das duas rondas ficarem alinhadas entre si */
+@media(min-width:701px){.round table{table-layout:fixed}.round th:nth-child(1){width:30%}.round th:nth-child(2){width:20%}.round th:nth-child(3){width:20%}}
+.round p{margin:8px 0 0}
+.st{color:var(--c);font-weight:700}
+.ok{--c:var(--ok)}.late{--c:var(--late)}.idle{--c:var(--off)}
+.t-ok{color:var(--ok);font-weight:700}.t-late{color:var(--late);font-weight:700}
+select,input{padding:10px;font:inherit}
+/* botões de ação: todos com a mesma altura (52 px). Para deixar maiores ou menores, mude o min-height e o font-size */
+button.go,button.alt{display:inline-flex;align-items:center;justify-content:center;min-height:52px;padding:0 24px;font:inherit;font-size:1.05rem;font-weight:700;border-radius:6px;cursor:pointer}
+button.go{background:var(--accent);color:#fff;border:2px solid var(--accent)}
+button.go:hover:not(:disabled){background:var(--brand-dark);border-color:var(--brand-dark)}
+button.go:disabled{background:var(--off);border-color:var(--off);cursor:not-allowed}
+button.alt{background:#fff;color:var(--accent);border:2px solid var(--accent)}
+button.alt:hover:not(:disabled){background:#ECEFF9}
+button.alt:disabled{opacity:.5;cursor:not-allowed}
+/* botões pequenos, usados dentro das tabelas (Remover, Gerar novo PIN) e no Sair */
+button.sm{min-height:40px;padding:0 14px;font-size:.95rem}
+button.link{background:none;border:0;padding:0;font:inherit;color:var(--accent);text-decoration:underline;cursor:pointer}
+/* "Últimos dias": o dia aberto no relatório fica destacado */
+#history button[aria-current]{font-weight:700;text-decoration:none}
+#history tr:has(button[aria-current]){background:#ECEFF9}
+#login{max-width:340px;margin:40px auto;padding:0 16px}
+#login input,#login button{width:100%;margin-top:6px}
+#login input,.bar input{min-height:52px}
+#login button{margin-top:14px}
+#err,.msg{min-height:1.5em;font-weight:600}
+.bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px}
+.bar h2{margin:0}
+.buttons{display:flex;gap:12px;flex-wrap:wrap}
+/* caixa do PIN novo: ele aparece uma única vez, por isso fica bem destacado */
+.pinbox{margin:16px 0;padding:14px 16px;background:#FFF8E5;border:2px solid var(--gold);border-radius:6px}
+.pinbox p{margin:0 0 8px}
+.pinbox .pin{margin-left:8px;font-size:1.7rem;letter-spacing:.18em;font-variant-numeric:tabular-nums}
+/* formulário em coluna (troca da senha da coordenação) */
+.form-col{display:grid;gap:6px;max-width:340px}
+.form-col input{min-height:52px}
+.form-col button{margin-top:10px}
+.actions{text-align:right;white-space:nowrap}
+.narrow{display:none}
+.only-print{display:none}
+:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+/* cabeçalho do relatório: o logo só aparece na impressão (na tela o cabeçalho da página já tem o logo) */
+.report-head{display:flex;align-items:center;gap:16px;margin-bottom:14px;padding-bottom:10px;border-bottom:3px solid var(--gold)}
+.report-head h2{margin:0;font-size:1.2rem}
+.report-head .logo-print{display:none;height:56px;width:auto}
+[hidden]{display:none!important}
+/* celular: cabeçalho compacto, abas do mesmo tamanho e cada ponto da ronda vira um bloco (nome, prazo, hora, situação) */
+@media(max-width:700px){
+  header,nav,section{padding-left:12px;padding-right:12px}
+  header{gap:10px 12px;padding-top:10px;padding-bottom:10px}
+  .logo{height:48px;padding-right:12px}
+  h1{font-size:1.25rem}
+  h1 small{display:block;margin:0;font-size:.9rem}
+  .qr-link{margin-left:0;flex:1 1 auto;min-width:60%;justify-content:center}
+  #logout{min-height:52px}
+  /* escala: colunas de largura fixa e caixas de seleção ocupando a coluna (nomes compridos não empurram a tabela para fora da tela) */
+  .sched-table{table-layout:fixed}
+  .sched-table th.day{width:26%}
+  .sched-table select{width:100%}
+  #sched th,#sched td,#keys th,#keys td{padding-left:8px;padding-right:8px}
+  .wide{display:none}.narrow{display:inline}
+  nav{gap:6px}
+  nav button{flex:1;padding:12px 4px;font-size:1rem;white-space:nowrap}
+  .round{padding:10px 12px}
+  .round thead{display:none}
+  .round table,.round tbody,.round tr{display:block;width:100%}
+  .round tr{padding:8px 0;border-bottom:1px solid var(--line)}
+  .round td{display:flex;justify-content:space-between;gap:12px;padding:2px 0;border:0}
+  .round td:first-child{font-weight:700}
+  .round td[data-label]::before{content:attr(data-label);color:var(--wait)}
+}
+@media print{
+  body{background:#fff}
+  header,nav,.noprint,#today,#sched,#keys{display:none!important}
+  section{padding:0;max-width:none}
+  .only-print{display:block}
+  .report-head .logo-print{display:block}
+  .round{border-left:4px solid #000;break-inside:avoid}
+  .st,.t-ok,.t-late{color:#000}
+}
+</style>
+</head>
+<body>
+<header>
+  <img class="logo" src="/logo.jpg" alt="Logo da instituição" width="144" height="64" draggable="false">
+  <!-- O nome é uma imagem SVG: o texto dentro de um <img> não pode ser selecionado.
+       Para mudar cor ou tamanho, edite fill e font-size dentro do src (%23 é o "#" da cor). O mesmo SVG está em qr.html -->
+  <h1><img class="wordmark" alt="ShalomPatrol" width="154" height="32" draggable="false" src="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='154' height='32' viewBox='0 0 154 32'><text x='0' y='24' textLength='154' lengthAdjust='spacingAndGlyphs' font-family='Segoe UI,system-ui,-apple-system,Roboto,Arial,sans-serif' font-size='24' font-weight='700' fill='%23373F92'>ShalomPatrol</text></svg>"> <small>Controle de rondas</small></h1>
+  <!-- abre em uma guia nova: o painel continua aberto na guia de origem -->
+  <a class="qr-link" href="/qr" target="_blank" rel="noopener">QR codes dos pontos</a>
+  <!-- Sair: encerra a sessão deste computador (o painel agora gera PINs e troca senha; não deixe aberto em computador de uso comum) -->
+  <button type="button" class="alt sm" id="logout" hidden>Sair</button>
+</header>
+
+<form id="login" hidden>
+  <h2>Entrar como coordenador</h2>
+  <label for="password">Senha</label>
+  <input id="password" type="password" autocomplete="current-password" required>
+  <button class="go">Entrar</button>
+  <p id="err" role="alert" style="color:var(--late)"></p>
+</form>
+
+<div id="board" hidden>
+  <nav role="tablist">
+    <button role="tab" id="t-today" aria-selected="true">Hoje</button>
+    <button role="tab" id="t-records" aria-selected="false">Registros</button>
+    <button role="tab" id="t-sched" aria-selected="false">Escala</button>
+    <button role="tab" id="t-keys" aria-selected="false">Senhas</button>
+  </nav>
+
+  <section id="today">
+    <div class="bar">
+      <h2 id="today-date"></h2>
+      <button class="go" id="refresh">Atualizar</button>
+      <small id="updated" aria-live="polite"></small>
+    </div>
+    <p class="note" id="weekend-note" hidden>Não há rondas nos finais de semana.</p>
+    <div id="today-content">
+      <div id="rounds"></div>
+      <h2 style="margin-top:28px">Registros de hoje</h2>
+      <table>
+        <thead><tr><th>Horário</th><th>Segurança</th><th>Ponto</th></tr></thead>
+        <tbody id="log"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="records" hidden>
+    <div class="bar noprint">
+      <label for="day"><strong>Escolha o dia</strong></label>
+      <input type="date" id="day">
+      <button class="go" id="print" disabled>Imprimir relatório do dia</button>
+    </div>
+    <div id="report"></div>
+    <div class="noprint">
+      <h2 style="margin-top:28px">Exportar para Excel</h2>
+      <div class="bar">
+        <label for="x-from">De</label>
+        <input type="date" id="x-from">
+        <label for="x-to">até</label>
+        <input type="date" id="x-to">
+        <button class="alt" id="export">Exportar para Excel</button>
+        <small class="msg" id="x-msg" role="status"></small>
+      </div>
+      <h2 style="margin-top:28px">Últimos dias</h2>
+      <table>
+        <thead><tr><th>Dia</th><th>Ronda da manhã</th><th>Ronda da tarde</th></tr></thead>
+        <tbody id="history"></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="sched" hidden>
+    <h2>Escala semanal</h2>
+    <p><small>Dois seguranças diferentes por dia, um em cada ronda. Vale para todas as semanas, a partir de hoje: os dias anteriores não mudam. Só o segurança escalado consegue bater o ponto.</small></p>
+    <table class="sched-table">
+      <thead><tr><th class="day">Dia</th><th id="h-manha"></th><th id="h-tarde"></th></tr></thead>
+      <tbody id="schedule"></tbody>
+    </table>
+    <p class="buttons">
+      <button class="alt" id="edit">Editar a escala</button>
+      <button class="go" id="save" hidden>Salvar escala</button>
+      <button class="alt" id="cancel" hidden>Cancelar</button>
+    </p>
+    <p class="msg" id="saved" role="status"></p>
+    <div id="team" hidden>
+      <h2 style="margin-top:28px">Seguranças</h2>
+      <p><small>Adicionar e remover valem na hora, sem depender de "Salvar escala". Quem é removido não consegue mais entrar; os registros antigos continuam nos relatórios.</small></p>
+      <table>
+        <thead><tr><th>Segurança</th><th>Rondas na escala</th><th></th></tr></thead>
+        <tbody id="team-list"></tbody>
+      </table>
+      <form class="bar" id="add-guard" style="margin-top:16px">
+        <label for="new-guard"><strong>Novo segurança</strong></label>
+        <input id="new-guard" maxlength="30" placeholder="Nome" autocomplete="off" required>
+        <button class="alt">Adicionar segurança</button>
+      </form>
+      <p class="msg" id="team-msg" role="status"></p>
+    </div>
+    <!-- PIN de um segurança recém-adicionado: fica na tela até clicar em "Já anotei" ou trocar de aba (mesmo depois de salvar a escala) -->
+    <div class="pinbox" id="sched-pin" hidden></div>
+  </section>
+
+  <section id="keys" hidden>
+    <h2>PINs dos seguranças</h2>
+    <p><small>O PIN novo é sorteado pelo sistema e aparece uma única vez. O PIN anterior deixa de valer na hora.</small></p>
+    <table>
+      <thead><tr><th>Segurança</th><th>PIN gerado em</th><th></th></tr></thead>
+      <tbody id="pins"></tbody>
+    </table>
+    <div class="pinbox" id="keys-pin" hidden></div>
+    <p class="msg" id="keys-msg" role="status"></p>
+
+    <h2 style="margin-top:28px">Senha da coordenação</h2>
+    <p><small>Uma senha só para todos os coordenadores. Ao trocar, os outros computadores que estavam no painel precisam entrar de novo.</small></p>
+    <form class="form-col" id="pw-form">
+      <label for="pw-current">Senha atual</label>
+      <input id="pw-current" type="password" autocomplete="current-password" required>
+      <label for="pw-new">Nova senha (pelo menos 8 caracteres)</label>
+      <input id="pw-new" type="password" autocomplete="new-password" minlength="8" maxlength="100" required>
+      <label for="pw-again">Repita a nova senha</label>
+      <input id="pw-again" type="password" autocomplete="new-password" minlength="8" maxlength="100" required>
+      <button class="go">Trocar a senha</button>
+    </form>
+    <p class="msg" id="pw-msg" role="status"></p>
+
+    <h2 style="margin-top:28px">Últimas alterações</h2>
+    <p><small>O que foi mudado pelo painel, quando e de qual computador (endereço na rede).</small></p>
+    <table>
+      <thead><tr><th>Quando</th><th>O que mudou</th><th>Computador</th></tr></thead>
+      <tbody id="audit"></tbody>
+    </table>
+  </section>
+</div>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const hm = (ts) => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+const hms = (ts) => new Date(ts).toLocaleTimeString('pt-BR');
+const longDate = (ts) => new Date(ts).toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+const brDate = (iso) => iso.slice(8) + '/' + iso.slice(5, 7); // 2026-03-02 vira 02/03
+const todayIso = () => new Date().toLocaleDateString('sv-SE'); // AAAA-MM-DD no fuso do navegador
+const post = async (url, body) => {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  return { status: r.status, data: await r.json() };
+};
+// Todo texto que vem do servidor (nomes de seguranças e de pontos) passa por aqui antes de entrar no HTML:
+// assim um nome nunca é interpretado como código da página
+const esc = (text) => String(text ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const stamp = (ts) => new Date(ts).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+// Mensagem de resultado: verde quando deu certo, vermelha quando não
+const say = (sel, text, ok) => { $(sel).style.color = ok ? 'var(--ok)' : 'var(--late)'; $(sel).textContent = text || ''; };
+// Caixa do PIN: mostra uma vez e some em "Já anotei", ao trocar de aba ou ao sair
+function showPin(sel, name, pin, hint) {
+  $(sel).innerHTML = `<p><strong>PIN de ${esc(name)}:</strong><strong class="pin">${esc(pin)}</strong></p>` +
+    `<p><small>Anote agora e entregue ao segurança. Este PIN não será mostrado de novo.${hint ? ' ' + esc(hint) : ''}</small></p>` +
+    '<button type="button" class="alt sm" data-dismiss>Já anotei</button>';
+  $(sel).hidden = false;
+  $(sel).scrollIntoView({ block: 'nearest' });
+}
+function clearPins() { for (const box of document.querySelectorAll('.pinbox')) { box.hidden = true; box.innerHTML = ''; } }
+document.addEventListener('click', (e) => { if (e.target.matches('[data-dismiss]')) clearPins(); });
+
+// Atraso sempre em minutos; acima de 1 hora só avisa
+const lateText = (min) => (min > 60 ? 'Atrasou mais de uma hora' : `Atrasado ${min} min`);
+const badge = (min) => (min > 0 ? `<span class="t-late">${lateText(min)}</span>` : '<span class="t-ok">Em dia</span>');
+function roundLabel(r) {
+  if (r.state === 'ok') return 'Em dia';
+  if (r.state === 'idle') return r.guard ? 'Aguardando início' : 'Sem segurança escalado';
+  const parts = [r.lateMax ? lateText(r.lateMax) : 'Atrasado'];
+  if (r.missing) parts.push(`faltaram ${r.missing} ${r.missing > 1 ? 'pontos' : 'ponto'}`);
+  return parts.join(', ');
+}
+// route: nomes dos pontos na ordem fixa da ronda (vem do servidor)
+const roundBlocks = (rounds, route = []) => rounds.map((r) => {
+  // data-label: nome da coluna, usado só no celular (onde a tabela vira blocos)
+  const rows = r.steps.map((s) => `<tr><td>${esc(s.name)}</td><td class="num" data-label="Prazo">até ${hm(s.deadline)}</td><td class="num" data-label="Batido às">${hms(s.ts)}</td><td data-label="Situação">${badge(s.lateMin)}</td></tr>`).join('') +
+    r.pending.map((n) => `<tr><td>${esc(n)}</td><td colspan="3"><small>${r.missing ? 'Não registrado' : '—'}</small></td></tr>`).join('');
+  return `<div class="round ${r.state}"><div class="head"><h3>${esc(r.label)} <small>${hm(r.opens)} às ${hm(r.lastDeadline)}</small></h3>` +
+    `<span>${esc(r.guard || 'Sem segurança escalado')}</span><strong class="st">${roundLabel(r)}</strong></div>` +
+    `<table><thead><tr><th>Ponto</th><th>Prazo</th><th>Batido às</th><th>Situação</th></tr></thead><tbody>${rows}</tbody></table>` +
+    (r.waiting ? `<p>Próximo ponto: <strong>${esc(r.waiting.point)}</strong>, prazo até ${hm(r.waiting.deadline)}. ${badge(r.waiting.lateMin)}</p>` : '') +
+    // só aparece em rondas gravadas antes da ordem fixa (hoje a leitura fora de ordem é recusada)
+    (r.complete && !r.orderOk ? `<p><small>Ordem diferente da prevista (${esc(route.join(' → '))}).</small></p>` : '') + '</div>';
+}).join('');
+const logRows = (log) => (log.length
+  ? log.map((l) => `<tr><td class="num">${hms(l.ts)}</td><td>${esc(l.guard)}</td><td>${esc(l.point)}</td></tr>`).join('')
+  : '<tr><td colspan="3">Nenhum registro.</td></tr>');
+
+// ---------- Aba Hoje ----------
+async function load() {
+  const r = await fetch('/api/status');
+  if (r.status === 401) { $('#login').hidden = false; $('#board').hidden = true; $('#logout').hidden = true; clearPins(); return; }
+  const d = await r.json();
+  $('#login').hidden = true; $('#board').hidden = false; $('#logout').hidden = false;
+  $('#updated').textContent = 'Atualizado às ' + hms(d.now);
+  $('#t-today').textContent = 'Hoje, dia ' + new Date(d.dayStart).getDate();
+  $('#today-date').textContent = longDate(d.dayStart);
+  $('#weekend-note').hidden = !d.weekend;
+  $('#today-content').hidden = !!d.weekend;
+  if (!d.weekend) {
+    $('#rounds').innerHTML = roundBlocks(d.rounds, d.route);
+    $('#log').innerHTML = logRows(d.log.slice().reverse());
+  }
+}
+$('#refresh').addEventListener('click', async () => {
+  $('#refresh').disabled = true;
+  try { await load(); } finally { $('#refresh').disabled = false; }
+});
+
+// ---------- Aba Registros ----------
+const recs = { from: null };
+function reportMessage(text) { $('#report').innerHTML = `<p class="note">${text}</p>`; $('#print').disabled = true; markHistory(); }
+// Marca em "Últimos dias" a linha do dia que está aberto no relatório
+function markHistory() {
+  for (const b of document.querySelectorAll('#history button[data-date]')) b.toggleAttribute('aria-current', b.dataset.date === $('#day').value);
+}
+async function loadReport() {
+  const date = $('#day').value;
+  if (!date) return reportMessage(recs.from ? `Os registros começam em ${brDate(recs.from)}.` : 'Escolha um dia.');
+  const weekday = new Date(date + 'T12:00:00').getDay();
+  if (weekday === 0 || weekday === 6) return reportMessage('Não há registros nos finais de semana');
+  if (recs.from && date < recs.from) return reportMessage(`Os registros começam em ${brDate(recs.from)}.`);
+  const r = await fetch('/api/day?date=' + date);
+  const d = await r.json();
+  if (!r.ok) return reportMessage(d.error || 'Não foi possível carregar o relatório.');
+  if (d.weekend) return reportMessage('Não há registros nos finais de semana');
+  $('#report').innerHTML = `<div class="report-head"><img class="logo-print" src="/logo.jpg" alt="Logo da instituição"><h2>ShalomPatrol: relatório de rondas, ${longDate(d.dayStart)}</h2></div>${roundBlocks(d.rounds, d.route)}` +
+    `<p class="only-print"><small>Gerado em ${new Date().toLocaleString('pt-BR')}</small></p>`;
+  $('#print').disabled = false;
+  markHistory();
+}
+async function loadHistory() {
+  const d = await (await fetch('/api/history')).json();
+  recs.from = d.from;
+  // os três campos de data aceitam só do primeiro dia dos registros até hoje
+  for (const id of ['#day', '#x-from', '#x-to']) {
+    $(id).min = d.from;
+    if (todayIso() >= d.from) $(id).max = todayIso(); else $(id).removeAttribute('max');
+  }
+  const cell = (r) => `<td class="st ${r.state}">${r.guard ? esc(r.guard) + ': ' : ''}${roundLabel(r)}</td>`;
+  $('#history').innerHTML = d.days.length
+    ? d.days.map((h) => `<tr><td><button class="link" data-date="${h.date}">${new Date(h.dayStart).toLocaleDateString('pt-BR', { weekday: 'short', day: '2-digit', month: '2-digit' })}</button></td>${h.rounds.map(cell).join('')}</tr>`).join('')
+    : `<tr><td colspan="3">Ainda não há registros. Eles começam em ${brDate(d.from)}.</td></tr>`;
+  markHistory();
+}
+async function openRecords() {
+  await loadHistory();
+  if (!$('#day').value) $('#day').value = todayIso() >= recs.from ? todayIso() : '';
+  // período da planilha: por padrão, do começo deste mês (ou do primeiro dia dos registros) até hoje
+  if (!$('#x-to').value && todayIso() >= recs.from) {
+    const monthStart = todayIso().slice(0, 8) + '01';
+    $('#x-from').value = monthStart > recs.from ? monthStart : recs.from;
+    $('#x-to').value = todayIso();
+  }
+  say('#x-msg', '');
+  loadReport();
+}
+for (const id of ['#x-from', '#x-to']) $(id).addEventListener('change', () => say('#x-msg', ''));
+// Exportar para Excel: o servidor monta o .xlsx do período e o navegador baixa o arquivo
+$('#export').addEventListener('click', async () => {
+  const from = $('#x-from').value, to = $('#x-to').value;
+  if (!from || !to) return say('#x-msg', 'Escolha a data inicial e a data final.');
+  if (from > to) return say('#x-msg', 'A data inicial precisa vir antes da data final.');
+  $('#export').disabled = true;
+  say('#x-msg', 'Gerando a planilha…', true);
+  try {
+    const r = await fetch(`/api/export?from=${from}&to=${to}`);
+    if (!r.ok) return say('#x-msg', (await r.json()).error || 'Não foi possível gerar a planilha.');
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(await r.blob());
+    link.download = `rondas_${from}_a_${to}.xlsx`;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(link.href), 10000);
+    say('#x-msg', 'Planilha gerada. Veja na pasta de downloads.', true);
+  } catch { say('#x-msg', 'Sem conexão com o servidor.'); } finally { $('#export').disabled = false; }
+});
+$('#history').addEventListener('click', async (e) => {
+  const button = e.target.closest('button[data-date]');
+  if (!button) return;
+  $('#day').value = button.dataset.date;
+  await loadReport();
+  // o relatório fica no alto da aba: rola a tela até ele, senão parece que o clique não fez nada
+  $('#records').scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+$('#day').addEventListener('change', loadReport);
+$('#print').addEventListener('click', async () => { await loadReport(); if (!$('#print').disabled) window.print(); });
+
+// ---------- Aba Escala (fixa; só muda depois de "Editar a escala" e "Salvar escala") ----------
+const DAYS = ['Segunda', 'Terça', 'Quarta', 'Quinta', 'Sexta'];
+let sched = null, editing = false;
+let draft = []; // a escala enquanto está sendo editada (só vai para o servidor em "Salvar escala")
+const guardName = (id) => (sched.guards.find((g) => g.id === id) || {}).name || '—';
+const shiftShort = (id) => (sched.rounds.find((r) => r.id === id) || { label: '' }).label.replace('Ronda das ', '');
+// monta o rascunho com as 10 rondas da semana, a partir da escala salva
+const draftFrom = (rows) => DAYS.flatMap((_, i) => sched.rounds.map((rd) => {
+  const saved = rows.find((x) => x.weekday === i + 1 && x.shift === rd.id);
+  return { weekday: i + 1, shift: rd.id, guard: saved ? saved.guard : (sched.guards[0] || {}).id };
+}));
+const sameRows = (a, b) => a.length === b.length && a.every((x) => b.some((y) => y.weekday === x.weekday && y.shift === x.shift && y.guard === x.guard));
+function renderSchedule() {
+  $('#h-manha').textContent = sched.rounds[0].label; $('#h-tarde').textContent = sched.rounds[1].label;
+  const rows = editing ? draft : sched.rows;
+  const pick = (day, shift) => (rows.find((x) => x.weekday === day && x.shift === shift) || {}).guard;
+  $('#schedule').innerHTML = DAYS.map((name, i) => `<tr><td>${name}</td>` + sched.rounds.map((rd) => {
+    const current = pick(i + 1, rd.id);
+    return editing
+      ? `<td><select data-day="${i + 1}" data-shift="${rd.id}" aria-label="${name}, ${esc(rd.label)}">${sched.guards.map((g) => `<option value="${g.id}"${g.id === current ? ' selected' : ''}>${esc(g.name)}</option>`).join('')}</select></td>`
+      : `<td>${esc(guardName(current))}</td>`;
+  }).join('') + '</tr>').join('');
+  $('#edit').hidden = editing; $('#save').hidden = !editing; $('#cancel').hidden = !editing;
+  $('#team').hidden = !editing;
+  if (editing) renderTeam();
+}
+// Lista dos seguranças (aparece só durante a edição), com as rondas de cada um no rascunho
+function renderTeam() {
+  const where = (id) => draft.filter((x) => x.guard === id).map((x) => `${DAYS[x.weekday - 1].slice(0, 3)} ${shiftShort(x.shift)}`).join(', ');
+  $('#team-list').innerHTML = sched.guards.map((g) => `<tr><td>${esc(g.name)}</td><td><small>${esc(where(g.id)) || 'Fora da escala'}</small></td>` +
+    `<td class="actions"><button type="button" class="alt sm" data-remove="${g.id}">Remover</button></td></tr>`).join('');
+}
+async function loadSchedule() {
+  const r = await fetch('/api/schedule');
+  if (r.status === 401) return load(); // sessão encerrada: volta para a tela de senha
+  sched = await r.json(); editing = false; renderSchedule();
+}
+$('#edit').addEventListener('click', () => { editing = true; draft = draftFrom(sched.rows); say('#saved', ''); say('#team-msg', ''); renderSchedule(); });
+$('#cancel').addEventListener('click', () => { editing = false; say('#saved', ''); renderSchedule(); });
+// cada troca nas caixas de seleção atualiza o rascunho (e a coluna "Rondas na escala" da lista de seguranças)
+$('#schedule').addEventListener('change', (e) => {
+  const row = draft.find((x) => x.weekday === Number(e.target.dataset.day) && x.shift === e.target.dataset.shift);
+  if (row) { row.guard = Number(e.target.value); say('#team-msg', ''); renderTeam(); }
+});
+$('#save').addEventListener('click', async () => {
+  const { data } = await post('/api/schedule', { rows: draft });
+  say('#saved', data.ok ? 'Escala salva.' : data.error, data.ok);
+  if (data.ok) { await loadSchedule(); load(); }
+});
+// Novo segurança: o servidor cria, sorteia o PIN e devolve para ser mostrado uma única vez
+$('#add-guard').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const { data } = await post('/api/guards/add', { name: $('#new-guard').value });
+  if (!data.ok) return say('#team-msg', data.error);
+  $('#new-guard').value = '';
+  sched.guards = (await (await fetch('/api/schedule')).json()).guards; // lista nova; o rascunho da escala é mantido
+  renderSchedule();
+  say('#team-msg', `${data.name} entrou na lista. Para fazer rondas, escolha esse nome na escala e salve.`, true);
+  showPin('#sched-pin', data.name, data.pin);
+});
+// Remover: só quem não está em nenhuma ronda do rascunho. Se o rascunho mudou, ele é salvo antes
+// (o servidor também confere: não remove quem ainda está na escala salva)
+$('#team-list').addEventListener('click', async (e) => {
+  const button = e.target.closest('button[data-remove]');
+  if (!button) return;
+  const id = Number(button.dataset.remove);
+  const name = guardName(id);
+  if (draft.some((x) => x.guard === id)) return say('#team-msg', `${name} ainda está na escala acima. Troque por outro nome nessas rondas e clique em Remover de novo.`);
+  const changed = !sameRows(draft, sched.rows);
+  if (!confirm(`Remover ${name}?\n\nEssa pessoa não vai mais conseguir entrar para bater o ponto. Os registros antigos continuam nos relatórios.` + (changed ? '\n\nA escala que está na tela será salva.' : ''))) return;
+  if (changed) {
+    const saved = await post('/api/schedule', { rows: draft });
+    if (!saved.data.ok) return say('#team-msg', saved.data.error);
+  }
+  const { data } = await post('/api/guards/remove', { id });
+  if (!data.ok) return say('#team-msg', data.error);
+  sched = await (await fetch('/api/schedule')).json();
+  draft = draftFrom(sched.rows);
+  renderSchedule();
+  say('#team-msg', `${name} saiu da lista de seguranças.`, true);
+  load();
+});
+
+// ---------- Aba Senhas (PINs dos seguranças e senha da coordenação) ----------
+async function loadKeys() {
+  const r = await fetch('/api/team');
+  if (r.status === 401) return load(); // sessão encerrada: volta para a tela de senha
+  const d = await r.json();
+  $('#pins').innerHTML = d.guards.map((g) => `<tr><td>${esc(g.name)}</td><td class="num"><small>${g.pinChangedAt ? stamp(g.pinChangedAt) : '—'}</small></td>` +
+    `<td class="actions"><button type="button" class="alt sm" data-pin="${g.id}" data-name="${esc(g.name)}"><span class="wide">Gerar novo PIN</span><span class="narrow">Novo PIN</span></button></td></tr>`).join('');
+  $('#audit').innerHTML = d.log.length
+    ? d.log.map((l) => `<tr><td class="num">${stamp(l.ts)}</td><td>${esc(l.action)}</td><td class="num"><small>${esc(l.ip)}</small></td></tr>`).join('')
+    : '<tr><td colspan="3">Nenhuma alteração registrada ainda.</td></tr>';
+}
+// Novo PIN: sorteado no servidor; o anterior deixa de valer e quem estava logado com ele entra de novo
+$('#pins').addEventListener('click', async (e) => {
+  const button = e.target.closest('button[data-pin]');
+  if (!button) return;
+  const id = Number(button.dataset.pin);
+  if (!confirm(`Gerar um novo PIN para ${button.dataset.name}?\n\nO PIN atual deixa de valer na hora.`)) return;
+  const { data } = await post('/api/guards/pin', { id });
+  if (!data.ok) return say('#keys-msg', data.error);
+  say('#keys-msg', '');
+  await loadKeys();
+  showPin('#keys-pin', data.name, data.pin);
+});
+// Senha da coordenação: o servidor só troca se a senha atual conferir
+$('#pw-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const current = $('#pw-current').value, next = $('#pw-new').value;
+  if (next !== $('#pw-again').value) return say('#pw-msg', 'A nova senha e a repetição não são iguais.');
+  const { data } = await post('/api/coord-password', { current, next });
+  if (!data.ok) return say('#pw-msg', data.error);
+  e.target.reset();
+  say('#pw-msg', 'Senha trocada. Os outros computadores que estavam no painel vão pedir a senha nova.', true);
+  loadKeys();
+});
+
+// ---------- Abas, login e saída ----------
+const TABS = ['today', 'records', 'sched', 'keys'];
+function tab(name) {
+  for (const id of TABS) {
+    $('#' + id).hidden = id !== name;
+    $('#t-' + id).setAttribute('aria-selected', id === name);
+  }
+  clearPins(); // um PIN mostrado não continua na tela ao trocar de aba
+  if (name === 'today') load();
+  if (name === 'records') openRecords();
+  if (name === 'sched') { say('#saved', ''); loadSchedule(); }
+  if (name === 'keys') { say('#pw-msg', ''); say('#keys-msg', ''); $('#pw-form').reset(); loadKeys(); }
+}
+for (const id of TABS) $('#t-' + id).onclick = () => tab(id);
+$('#logout').addEventListener('click', async () => { await post('/api/logout'); tab('today'); }); // sem sessão, o painel volta para a tela de senha
+
+$('#login').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const { data } = await post('/api/coord-login', { password: $('#password').value });
+  $('#err').textContent = data.ok ? '' : data.error;
+  if (data.ok) { $('#password').value = ''; load(); }
+});
+
+load();
+setInterval(() => { if (!$('#today').hidden && !$('#board').hidden) load(); }, 10000); // a aba Hoje também atualiza sozinha a cada 10 s; as outras não
+</script>
+</body>
+</html>

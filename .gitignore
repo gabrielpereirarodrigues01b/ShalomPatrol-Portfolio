@@ -1,0 +1,22 @@
+# Banco de dados local: guarda hashes dos PINs, tokens dos QR codes e o histórico de rondas
+rondas.db
+rondas.db-*
+
+# Logs (o console da primeira execução mostra os PINs) e variáveis de ambiente
+*.log
+.env
+
+# Dependências (hoje o projeto não usa nenhuma)
+node_modules/
+
+# Planilhas exportadas pelo painel (têm nomes dos seguranças e horários): não vão para o repositório
+rondas_*.xlsx
+
+# Anotações e arquivos locais de teste (podem ter PINs, senhas ou endereços internos): ficam só no computador
+*.txt
+caddyfile
+Caddyfile
+
+# Prints e arquivos temporários do sistema operacional
+Thumbs.db
+.DS_Store

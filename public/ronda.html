@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ShalomPatrol: bater o ponto</title>
+<style>
+:root{--ink:#17212B;--ok:#1E7A46;--bad:#B3261E;--accent:#1D4E89;--paper:#F3F5F7}
+*{box-sizing:border-box}
+/* Navegação por cursor (tecla F7 no Chrome/Edge): o navegador mostra um traço de texto onde se clica, como se desse para digitar.
+   Aqui o traço fica invisível no site inteiro e volta só nos campos em que realmente se digita */
+html{caret-color:transparent}
+input,select,textarea{caret-color:auto}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:var(--paper);color:var(--ink);font:18px/1.5 "Segoe UI",system-ui,sans-serif}
+main{width:100%;max-width:380px}
+body[data-state=ok]{background:var(--ok);color:#fff}
+body[data-state=already]{background:var(--accent);color:#fff}
+body[data-state=error]{background:var(--bad);color:#fff}
+.big{font-size:2.2rem;font-weight:700;line-height:1.15;margin:.2em 0}
+.sub{margin:.4em 0 0}
+#point{font-size:1.5rem;font-weight:600}
+#detail{white-space:pre-line}
+label{display:block;margin:14px 0 4px;font-weight:600}
+input,select{width:100%;padding:14px;font-size:1.3rem;border:2px solid #9AA7B4;border-radius:6px;background:#fff;color:var(--ink)}
+button{display:block;width:100%;margin-top:18px;padding:16px;font:inherit;font-size:1.1rem;font-weight:700;border:2px solid transparent;border-radius:6px;cursor:pointer}
+button.primary{color:#fff;background:var(--accent)}
+button.light{color:var(--ink);background:#fff}
+button.ghost{color:inherit;background:transparent;border-color:currentColor}
+input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid #FFC83D;outline-offset:2px}
+#login-error{min-height:1.5em;margin:10px 0 0;color:var(--bad);font-weight:600}
+[hidden]{display:none}
+</style>
+</head>
+<body data-state="loading">
+<main>
+  <p id="msg">Verificando…</p>
+
+  <form id="login" hidden>
+    <p class="big">Entre para bater o ponto</p>
+    <label for="guard">Seu nome</label>
+    <select id="guard" required></select>
+    <label for="pin">PIN</label>
+    <input id="pin" type="password" inputmode="numeric" maxlength="8" autocomplete="off" required>
+    <button class="primary">Entrar para bater o ponto</button>
+    <p id="login-error" role="alert"></p>
+  </form>
+
+  <section id="result" hidden>
+    <p class="big" id="title"></p>
+    <p class="sub" id="point"></p>
+    <p class="sub" id="detail"></p>
+    <button type="button" class="light" id="close" hidden></button>
+    <button type="button" class="ghost" id="again" hidden>Tentar de novo</button>
+    <button type="button" class="ghost" id="switch" hidden>Entrar com outro nome</button>
+  </section>
+</main>
+
+<script>
+const token = location.pathname.split('/').pop();
+const $ = (s) => document.querySelector(s);
+const hm = (ts) => new Date(ts).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+let nextPoint = null; // nome do próximo ponto da ronda; null quando não falta nenhum (ronda completa)
+
+async function post(url, body) {
+  const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body || {}) });
+  return { status: r.status, data: await r.json() };
+}
+
+// Mostra uma tela: loading, login, ok, already, error ou done
+function screen(state, o = {}) {
+  document.body.dataset.state = state;
+  $('#msg').hidden = state !== 'loading';
+  $('#login').hidden = state !== 'login';
+  $('#result').hidden = state === 'loading' || state === 'login';
+  $('#title').textContent = o.title || '';
+  $('#point').textContent = o.point || '';
+  $('#detail').textContent = o.detail || '';
+  $('#close').hidden = !o.closeLabel; $('#close').textContent = o.closeLabel || '';
+  $('#again').hidden = !o.again;
+  $('#switch').hidden = !o.switchUser;
+}
+
+async function loadGuards() {
+  const list = await (await fetch('/api/guards')).json();
+  $('#guard').replaceChildren(...list.map((g) => new Option(g.name, g.id))); // new Option trata o nome como texto puro (nunca como HTML)
+}
+
+async function register() {
+  screen('loading');
+  let res;
+  try { res = await post('/api/checkin', { token }); }
+  catch { return screen('error', { title: 'Sem conexão', detail: 'Verifique o Wi-Fi e leia o QR code de novo.', again: true }); }
+  const { status, data } = res;
+  if (status === 401) { await loadGuards(); return screen('login'); }
+  if (data.code === 'out_of_order') { // QR code lido fora da ordem fixa: nada foi registrado, e a tela diz qual é o ponto certo
+    nextPoint = data.next;
+    return screen('error', { title: 'Ponto não batido', point: data.point, detail: `Este ponto está fora da ordem.\nO próximo ponto da ronda é o ${data.next}.`, closeLabel: `Ir para o ${data.next}` });
+  }
+  if (!data.ok) {
+    return screen('error', { title: 'Ponto não batido', detail: data.error, again: true, switchUser: data.code === 'not_scheduled' });
+  }
+  nextPoint = data.next;
+  // o botão diz para qual ponto ir; depois do último ponto, ele encerra a ronda
+  const closeLabel = data.next ? `Ir para o ${data.next}` : 'Encerrar a ronda';
+  if (data.already) {
+    return screen('already', { title: 'Ponto Batido', point: data.point, detail: `${data.guard}: já batido às ${hm(data.ts)}.`, closeLabel });
+  }
+  screen('ok', { title: data.late ? 'Ponto batido com atraso' : 'Ponto batido', point: data.point, detail: `${data.guard}, às ${hm(data.ts)}.`, closeLabel });
+}
+
+// Fecha a aba. Alguns navegadores bloqueiam o fechamento; nesse caso pede para fechar manualmente
+$('#close').addEventListener('click', () => {
+  window.close();
+  setTimeout(() => screen('done', {
+    title: nextPoint ? 'Pronto' : 'Ronda encerrada',
+    detail: nextPoint ? `Pode fechar esta aba e ir para o ${nextPoint}.` : 'Pode fechar esta aba.',
+  }), 400);
+});
+$('#again').addEventListener('click', () => location.reload());
+$('#switch').addEventListener('click', async () => { await post('/api/logout'); register(); }); // sem sessão, cai na tela de entrada
+
+$('#login').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  $('#login-error').textContent = '';
+  const { data } = await post('/api/login', { guard: $('#guard').value, pin: $('#pin').value });
+  $('#pin').value = '';
+  if (!data.ok) { $('#login-error').textContent = data.error; return; }
+  register();
+});
+
+register();
+</script>
+</body>
+</html>
